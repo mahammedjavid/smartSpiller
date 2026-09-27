@@ -10,17 +10,19 @@ services:
     envVars:
       - key: NODE_VERSION
         value: "24"
+      # Set to your frontend's origin, e.g. https://smart-splitter.vercel.app
       - key: CORS_ORIGINS
         sync: false
-      - key: SUPABASE_URL
-        sync: false
-      - key: SUPABASE_ANON_KEY
-        sync: false
+      # From Google AI Studio. Set this in the dashboard, never in the repo.
       - key: GEMINI_API_KEY
         sync: false
       - key: GEMINI_MODEL
         value: gemini-3.8-flash
       - key: SCAN_TIMEOUT_MS
         value: "25000"
-      - key: STORE_BILL_IMAGES
-        value: "true"
+      - key: SCAN_RETRIES
+        value: "3"
+      # NOTE: a free Render service has no persistent disk — this file is wiped
+      # on every restart and redeploy. See README "Deploying" before relying on it.
+      - key: DATABASE_FILE
+        value: data/smart-splitter.db

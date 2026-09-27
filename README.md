@@ -132,18 +132,38 @@ The owner token travels in an `X-Owner-Token` header. Errors are always
 
 ## Deploying
 
-**Frontend → Vercel.** Point it at `frontend/`; `vercel.json` has the build command, output
-directory and SPA rewrite. Set `apiBaseUrl` and `appBaseUrl` in `environment.prod.ts` —
-`appBaseUrl` is what goes into the QR code, so it must be the public address.
+**Frontend → Vercel.** Deploys from `frontend/`; `vercel.json` sets the build command, the
+`dist/frontend/browser` output directory and the SPA rewrite.
 
-**Backend → Render.** `backend/render.yaml` describes a free web service. Two things matter:
+**Backend → Render.** `backend/render.yaml` describes a free web service with `/api/health` as
+its health check. Set `GEMINI_API_KEY` and `CORS_ORIGINS` (your Vercel origin) in the dashboard.
 
-- Set `CORS_ORIGINS` to your frontend URL.
-- **Attach a persistent disk** and point `DATABASE_FILE` at it. Render's free filesystem is
-  ephemeral, so without a disk every restart wipes the bills.
+Order matters, because each side needs the other's URL:
 
-> Render's free instances sleep. The app hits `/api/health` on load and shows
-> "Waking up the server…" if a scan takes more than five seconds.
+1. Deploy the backend, note its `https://….onrender.com` URL.
+2. Put that URL in `apiBaseUrl` in `frontend/src/environments/environment.prod.ts`, commit.
+3. Deploy the frontend, note its origin.
+4. Set `CORS_ORIGINS` on Render to that origin and redeploy the backend.
+
+`appBaseUrl` needs no configuring — the share link and QR code use `location.origin`, so they
+always point at wherever the app is actually served.
+
+The frontend calls the backend **directly rather than through a Vercel proxy**, because the bill
+room holds an open Server-Sent Events stream and CDN proxies tend to buffer or time those out.
+That is why `CORS_ORIGINS` has to be right.
+
+> ### Bills do not survive on Render's free tier
+>
+> A free Render service [cannot attach a persistent disk](https://render.com/docs/disks) and its
+> filesystem is ephemeral, so `data/smart-splitter.db` is wiped on every restart, redeploy, and
+> wake from sleep (free instances sleep after ~15 minutes idle). A bill created during a demo
+> works completely — scanning, live claiming, UPI — it just will not be there tomorrow.
+>
+> To make bills durable, pick one: a paid Render instance with a disk; Fly.io, whose free tier
+> does include volumes, keeping SQLite unchanged; or move `backend/src/db.ts` to Postgres.
+
+> Free instances also sleep. The app hits `/api/health` on load and shows "Waking up the server…"
+> if a scan takes more than five seconds.
 
 ---
 

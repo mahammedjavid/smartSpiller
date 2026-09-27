@@ -1,6 +1,6 @@
 export const environment = {
   production: false,
   apiBaseUrl: 'http://localhost:8080/api',
-  /** What goes into the share link and QR code, so it must be publicly reachable. */
-  appBaseUrl: 'http://localhost:4300',
+  /** The QR code must point at wherever this app is actually served. */
+  appBaseUrl: typeof location === 'undefined' ? '' : location.origin,
 };
