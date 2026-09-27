@@ -68,6 +68,24 @@ every request; the server checks it only on owner-only routes (`requireOwner` in
 `routes/bills.ts`). Possessing the share link is the entire authorisation model — anyone with it
 can claim as anyone. That is an accepted trade, documented in the README, not an oversight.
 
+### Quantity lines take units, shared dishes split
+
+A bill line like `Mutton biriyani ×4 — ₹1600` is four separate things, not one thing four
+people share. Tapping it claims **one unit (₹400)** and leaves the other three unclaimed; the
+stepper takes more. A line nobody finishes keeps its remaining units in the unclaimed bucket
+rather than dumping them on whoever tapped first.
+
+The two meanings are told apart by counting, not by a setting:
+
+| | Condition | Behaviour |
+|---|---|---|
+| **Taking units** | total shares ≤ quantity | each share is one unit at `line ÷ quantity` |
+| **Sharing** | total shares > quantity | the line divides between claimants in proportion to shares |
+
+So one plate picked by three people still splits three ways, and four biryanis claimed one each
+cost ₹400 each. Per-unit prices come from `largestRemainder(lineTotal, quantity)`, so a line
+like ₹100.01 over 3 units is 3334 + 3334 + 3333 and the invariant still holds to the paisa.
+
 ### One person per name per bill
 
 Joining matches on a case-insensitive, trimmed display name before creating anyone

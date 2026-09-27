@@ -73,17 +73,21 @@ Every amount is an **integer number of paise**. No floating-point money anywhere
 1. **Item shares.** Each item's price is divided among its claimants in proportion to their
    shares, using the **largest remainder method**, so the pieces add up exactly. Ties go to
    whoever joined earlier.
-2. **Unclaimed items** go to their own bucket, shown to the payer.
-3. **Charges** (`tax + service charge + tip − discount + round off`) are split in proportion to
+2. **Quantity lines take units.** `Mutton biriyani ×4 — ₹1600` is four things: tapping it claims
+   one (₹400) and leaves three for everyone else. If more shares are claimed than there are
+   units — one dish three people picked — the line splits between them proportionally instead.
+3. **Unclaimed items and unclaimed units** go to their own bucket, shown to the payer.
+4. **Charges** (`tax + service charge + tip − discount + round off`) are split in proportion to
    each person's item subtotal, with the unclaimed bucket counted as one more weight — so
    unclaimed food carries its own share of tax. Largest remainder again.
-4. **Totals.** `person_total = item_subtotal + charge_share`, and
+5. **Totals.** `person_total = item_subtotal + charge_share`, and
    `Σ person_totals + unclaimed_total = grand_total`, to the paisa, always.
 
 That last line is asserted in every scenario in
 [`frontend/src/app/core/split.spec.ts`](./frontend/src/app/core/split.spec.ts) — the worked
 example from the PRD, the rounding case, all-unclaimed, a discount larger than the tax, a
-negative round-off, a zero-item bill, a single participant, and multi-quantity share stepping.
+negative round-off, a zero-item bill, a single participant, multi-quantity share stepping, and a
+real restaurant bill (Bhagini, ₹3,150) worked end to end.
 
 ```bash
 cd frontend && npm test
