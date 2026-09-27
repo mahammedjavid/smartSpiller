@@ -68,6 +68,13 @@ every request; the server checks it only on owner-only routes (`requireOwner` in
 `routes/bills.ts`). Possessing the share link is the entire authorisation model — anyone with it
 can claim as anyone. That is an accepted trade, documented in the README, not an oversight.
 
+### One person per name per bill
+
+Joining matches on a case-insensitive, trimmed display name before creating anyone
+(`routes/bills.ts`). Without it, rejoining from a second device or a cleared browser produced
+"Vaishali" *and* "vaishali" as separate people, splitting one person's claims across two rows.
+The same check guards the payer adding an offline friend.
+
 ### Money
 
 Every amount is an **integer number of paise**. Rupees exist only in form inputs and in what

@@ -11,7 +11,7 @@ import { ActivatedRoute, RouterLink } from '@angular/router';
 import { environment } from '../../environments/environment';
 import { Api, identity } from '../core/api';
 import type { BillItem, BillState } from '../core/models';
-import { computeSplit, type PersonSplit } from '../core/split';
+import { computeSplit, type ItemBreakdown, type PersonSplit } from '../core/split';
 import { buildUpiLink, upiNote } from '../core/upi';
 import { copyText, shareOrWhatsApp } from '../shared/copy';
 import { QrCodeComponent } from '../shared/qr-code';
@@ -37,19 +37,27 @@ import { RupeesPipe } from '../shared/rupees.pipe';
       } @else {
         @let bill = state()!.bill;
 
-        <header class="stack-s">
+        <header class="masthead">
           <div class="row-between">
-            <h1 class="truncate">{{ bill.restaurant_name || bill.title }}</h1>
+            <div class="grow">
+              <h1 class="truncate">{{ bill.restaurant_name || bill.title }}</h1>
+              <p class="tiny dim">
+                {{ participants().length }} {{ participants().length === 1 ? 'person' : 'people' }}
+                · {{ items().length }} items
+                @if (bill.bill_date) { · {{ dateLabel(bill.bill_date) }} }
+              </p>
+            </div>
+            <div class="bill-total">
+              <span class="tiny dim">Bill total</span>
+              <span class="big-money">{{ bill.total_paise | rupees }}</span>
+            </div>
+          </div>
+
+          <div class="row wrap">
             <span class="chip" [class.chip-brand]="bill.status === 'open'"
                   [class.chip-ok]="bill.status === 'settled'">{{ statusLabel() }}</span>
-          </div>
-          <div class="row-between">
-            <span class="muted small">{{ participants().length }} people · {{ items().length }} items</span>
-            <span class="money">{{ bill.total_paise | rupees }}</span>
-          </div>
-          <div class="row">
             <span class="chip" [class.chip-ok]="live()" [class.chip-warn]="!live()">
-              {{ live() ? '● live' : '○ reconnecting' }}
+              <span class="pulse-dot"></span>{{ live() ? 'Live' : 'Reconnecting' }}
             </span>
             @if (!live()) {
               <button class="btn-link small" type="button" (click)="refresh()">Refresh now</button>
@@ -71,28 +79,59 @@ import { RupeesPipe } from '../shared/rupees.pipe';
           </form>
         }
 
+        <!-- ── your share, front and centre ───────────── -->
+        @if (me() && !isPayer()) {
+          <section class="hero-card">
+            <span class="tiny" style="opacity:.75">Your share</span>
+            <span class="hero-money">{{ myTotalPaise() | rupees }}</span>
+            <span class="tiny" style="opacity:.75">
+              @if (myItemCount() === 0) { Nothing picked yet — tap the dishes you had }
+              @else { {{ myItemCount() }} item{{ myItemCount() === 1 ? '' : 's' }}
+                      · incl. {{ mySplit()!.chargeSharePaise | rupees }} tax and charges }
+            </span>
+          </section>
+        }
+
         <!-- ── payer: share ───────────────────────────── -->
         @if (isPayer()) {
-          <section class="card stack center">
-            <h2>Let everyone in</h2>
-            <app-qr-code [value]="shareUrl()" [size]="180" alt="QR code to join this bill" />
-            <code class="share-code">{{ bill.code }}</code>
-            <div class="row wrap" style="justify-content:center">
-              <button class="btn btn-sm btn-ghost" type="button" (click)="copyLink()">
-                {{ copied() ? '✓ Copied' : 'Copy link' }}
+          <section class="card stack" [class.compact]="guestCount() > 0 && !shareOpen()">
+            @if (guestCount() > 0 && !shareOpen()) {
+              <button class="row share-collapsed" type="button" (click)="shareOpen.set(true)">
+                <span class="grow row">
+                  <span class="chip chip-brand">{{ bill.code }}</span>
+                  <span class="small muted">{{ guestCount() }} joined</span>
+                </span>
+                <span class="btn btn-sm btn-ghost">Show QR</span>
               </button>
-              <button class="btn btn-sm btn-ghost" type="button" (click)="share()">Share</button>
-            </div>
+            } @else {
+              <div class="stack center">
+                <h2>Let everyone in</h2>
+                <p class="small muted">Scan this, or share the link</p>
+                <div class="qr-frame">
+                  <app-qr-code [value]="shareUrl()" [size]="172" alt="QR code to join this bill" />
+                </div>
+                <code class="share-code">{{ bill.code }}</code>
+                <div class="row wrap" style="justify-content:center">
+                  <button class="btn btn-sm btn-soft" type="button" (click)="copyLink()">
+                    {{ copied() ? '✓ Copied' : 'Copy link' }}
+                  </button>
+                  <button class="btn btn-sm btn-ghost" type="button" (click)="share()">Share</button>
+                  @if (guestCount() > 0) {
+                    <button class="btn btn-sm btn-ghost" type="button" (click)="shareOpen.set(false)">Hide</button>
+                  }
+                </div>
+              </div>
+            }
           </section>
 
           @if (split().unclaimed.itemCount > 0) {
-            <div class="banner banner-warn stack-s">
-              <p class="strong">
-                {{ split().unclaimed.itemCount }} item{{ split().unclaimed.itemCount === 1 ? '' : 's' }} unclaimed
+            <div class="banner banner-warn row wrap">
+              <span class="grow strong small">
+                {{ split().unclaimed.itemCount }} unclaimed
                 · {{ split().unclaimed.totalPaise | rupees }}
-              </p>
+              </span>
               <button class="btn btn-sm btn-ghost" type="button" (click)="splitLeftovers()" [disabled]="working()">
-                Split leftovers equally
+                Split equally
               </button>
             </div>
           }
@@ -100,45 +139,50 @@ import { RupeesPipe } from '../shared/rupees.pipe';
 
         <!-- ── items ──────────────────────────────────── -->
         <section class="stack-s">
-          <div class="row-between">
+          <div class="section-head">
             <h2>{{ isPayer() ? 'The bill' : 'Tap what you had' }}</h2>
-            @if (me() && myItemCount() === 0 && bill.status === 'open') {
-              <span class="tiny dim">Nothing picked yet</span>
-            }
+            <span class="tiny dim">{{ items().length }} items</span>
           </div>
 
           @for (item of items(); track item.id) {
             @let claimants = claimantsOf(item.id);
             @let mine = isMine(item.id);
-            <div class="card-flat item" [class.mine]="mine">
+            <div class="card-flat item" [class.mine]="mine" [class.unclaimed]="!claimants.length">
               <button class="item-main" type="button" [disabled]="!canClaim()"
                       [attr.aria-pressed]="mine" (click)="toggleClaim(item)">
+                @if (canClaim()) {
+                  <span class="tick" [class.on]="mine" aria-hidden="true">{{ mine ? '✓' : '' }}</span>
+                }
                 <span class="stack-s grow">
                   <span class="row">
                     <span class="strong truncate">{{ item.name }}</span>
-                    @if (item.quantity > 1) { <span class="chip">×{{ item.quantity }}</span> }
+                    @if (item.quantity > 1) { <span class="chip chip-quiet">×{{ item.quantity }}</span> }
                   </span>
-                  @if (claimants.length) {
-                    <span class="row wrap tiny muted">
-                      @for (person of claimants; track person.id) {
-                        <span class="avatar" [title]="person.display_name">{{ initials(person.display_name) }}</span>
-                      }
-                      @if (claimants.length > 1) {
-                        <span>{{ eachOf(item.id) | rupees }} each</span>
-                      } @else {
-                        <span>all theirs</span>
-                      }
-                    </span>
-                  } @else {
-                    <span class="tiny dim">Unclaimed</span>
-                  }
+                  @let info = breakdown(item.id);
+                  <span class="row wrap tiny muted">
+                    @for (person of claimants; track person.id) {
+                      <span class="avatar" [class.avatar-brand]="person.id === me()"
+                            [title]="person.display_name">{{ initials(person.display_name) }}</span>
+                    }
+                    @if (item.quantity > 1 && !info.shared) {
+                      <span class="nowrap">{{ info.claimedShares }} of {{ item.quantity }} taken</span>
+                      <span class="nowrap">{{ info.eachPaise | rupees }} each</span>
+                    } @else if (claimants.length > 1) {
+                      <span>{{ info.eachPaise | rupees }} each</span>
+                    } @else if (!claimants.length) {
+                      <span class="dim">Nobody yet</span>
+                    }
+                    @if (info.unclaimedUnits > 0 && claimants.length) {
+                      <span class="chip chip-warn">{{ info.unclaimedUnits }} left</span>
+                    }
+                  </span>
                 </span>
                 <span class="money">{{ item.total_price_paise | rupees }}</span>
               </button>
 
               @if (mine && item.quantity > 1 && canClaim()) {
                 <div class="row stepper">
-                  <span class="tiny muted grow">My shares</span>
+                  <span class="tiny muted grow">How many did you have?</span>
                   <button class="btn btn-sm btn-ghost" type="button" aria-label="One share fewer"
                           [disabled]="myShares(item.id) <= 1" (click)="changeShares(item, -1)">−</button>
                   <span class="strong" style="min-width:1.5ch;text-align:center">{{ myShares(item.id) }}</span>
@@ -152,13 +196,16 @@ import { RupeesPipe } from '../shared/rupees.pipe';
 
         <!-- ── people ─────────────────────────────────── -->
         <section class="stack-s">
-          <h2>Who owes what</h2>
+          <div class="section-head">
+            <h2>Who owes what</h2>
+            @if (isPayer()) { <span class="tiny dim">{{ paidCount() }}/{{ owingCount() }} settled</span> }
+          </div>
           @for (person of split().people; track person.participantId) {
             @let record = participantById(person.participantId);
-            <div class="card-flat stack-s" [class.mine]="person.participantId === me()">
+            <div class="card-flat stack-s person" [class.mine]="person.participantId === me()">
               <div class="row-between">
                 <span class="row grow">
-                  <span class="avatar">{{ initials(person.displayName) }}</span>
+                  <span class="avatar avatar-lg" [class.avatar-brand]="person.participantId === me()">{{ initials(person.displayName) }}</span>
                   <span class="truncate strong">{{ person.displayName }}</span>
                   @if (person.isPayer) { <span class="chip chip-brand">paid the bill</span> }
                   @else if (record?.payment_status === 'confirmed') { <span class="chip chip-ok">✓ confirmed</span> }
@@ -177,7 +224,9 @@ import { RupeesPipe } from '../shared/rupees.pipe';
                     <button class="btn btn-sm btn-ghost" type="button" [disabled]="working()"
                             (click)="setStatus(person, 'pending')">Undo</button>
                   } @else {
-                    <button class="btn btn-sm btn-primary" type="button" [disabled]="working()"
+                    <button class="btn btn-sm" type="button" [disabled]="working()"
+                            [class.btn-primary]="record?.payment_status === 'marked_paid'"
+                            [class.btn-ghost]="record?.payment_status !== 'marked_paid'"
                             (click)="setStatus(person, 'confirmed')">
                       {{ record?.payment_status === 'marked_paid' ? 'Confirm received' : 'Mark received' }}
                     </button>
@@ -204,10 +253,20 @@ import { RupeesPipe } from '../shared/rupees.pipe';
         }
 
         @if (isPayer()) {
-          <section class="card stack-s">
+          <section class="card stack">
             <div class="row-between">
-              <span class="strong">{{ paidCount() }} of {{ owingCount() }} paid</span>
-              <span class="money">{{ receivedPaise() | rupees }} of {{ owedPaise() | rupees }}</span>
+              <div>
+                <span class="tiny dim">Collected</span>
+                <div class="big-money">{{ receivedPaise() | rupees }}</div>
+              </div>
+              <div style="text-align:right">
+                <span class="tiny dim">Owed to you</span>
+                <div class="money">{{ owedPaise() | rupees }}</div>
+              </div>
+            </div>
+            <div class="meter" role="img"
+                 [attr.aria-label]="paidCount() + ' of ' + owingCount() + ' people have paid'">
+              <div class="meter-fill" [style.width.%]="collectedPercent()"></div>
             </div>
             <p class="tiny dim">Payments are self-reported — Smart Splitter doesn't check with your bank.</p>
             @if (bill.status === 'open') {
@@ -224,16 +283,19 @@ import { RupeesPipe } from '../shared/rupees.pipe';
     @if (state() && me() && !isPayer()) {
       <div class="sticky-bar">
         <div class="sticky-inner">
-          <div class="grow">
-            <div class="tiny dim">Your share</div>
-            <div class="money">{{ myTotalPaise() | rupees }}</div>
-          </div>
           @if (myRecord()?.payment_status === 'pending') {
-            <button class="btn btn-primary" type="button" [disabled]="myTotalPaise() <= 0"
+            <button class="btn btn-primary btn-block" type="button" [disabled]="myTotalPaise() <= 0"
                     (click)="showPaySheet.set(true)">
-              Pay {{ myTotalPaise() | rupees }}
+              @if (myTotalPaise() > 0) { Pay {{ myTotalPaise() | rupees }} }
+              @else { Tap the dishes you had }
             </button>
           } @else {
+            <span class="grow row">
+              <span class="chip" [class.chip-ok]="myRecord()?.payment_status === 'confirmed'"
+                    [class.chip-warn]="myRecord()?.payment_status === 'marked_paid'">
+                {{ myRecord()?.payment_status === 'confirmed' ? '✓ Confirmed' : 'Waiting for confirmation' }}
+              </span>
+            </span>
             <button class="btn btn-ghost" type="button" [disabled]="working()" (click)="markPaid(false)">Undo</button>
           }
         </div>
@@ -272,31 +334,87 @@ import { RupeesPipe } from '../shared/rupees.pipe';
     }
   `,
   styles: `
-    .share-code { font-size: 1.25rem; letter-spacing: 0.18em; font-weight: 700; }
-    .item { padding: 0; overflow: hidden; }
-    .item.mine, .card-flat.mine { border-color: var(--brand); background: var(--brand-soft); }
+    .masthead { display: flex; flex-direction: column; gap: 10px; padding: 4px 2px 0; }
+    .bill-total { display: flex; flex-direction: column; align-items: flex-end; flex: none; }
+
+    /* the guest's own number, stated once and loudly */
+    .hero-card {
+      display: flex; flex-direction: column; gap: 3px;
+      background: var(--brand); color: var(--brand-ink);
+      border-radius: var(--r-lg); padding: 18px;
+      box-shadow: var(--shadow-2);
+    }
+
+    .qr-frame { background: #fff; padding: 12px; border-radius: var(--r); line-height: 0; }
+    .share-code {
+      font-size: 1.1875rem; letter-spacing: 0.2em; font-weight: 700;
+      color: var(--ink-2); padding-left: 0.2em;
+    }
+    .share-collapsed {
+      width: 100%; min-height: var(--tap);
+      background: none; border: 0; padding: 0;
+      font: inherit; color: inherit; cursor: pointer; text-align: left;
+    }
+    .card.compact { padding: 10px 12px; }
+
+    /* ── item rows ── */
+    .item { padding: 0; overflow: hidden; transition: border-color 140ms var(--ease), background 140ms var(--ease); }
+    .item.unclaimed { border-style: dashed; }
+    .item.mine { border-color: var(--brand-line); background: var(--brand-soft); border-style: solid; }
     .item-main {
       display: flex; align-items: center; gap: 12px; width: 100%;
-      min-height: 60px; padding: 12px 14px;
+      min-height: 62px; padding: 12px 14px;
       background: none; border: 0; font: inherit; color: inherit;
       text-align: left; cursor: pointer;
     }
     .item-main:disabled { cursor: default; }
+    .item-main:active:not(:disabled) { background: color-mix(in srgb, var(--brand) 8%, transparent); }
+
+    .tick {
+      width: 22px; height: 22px; flex: none;
+      border-radius: 7px; border: 1.5px solid var(--line-strong);
+      display: grid; place-items: center;
+      font-size: 0.75rem; font-weight: 800; color: transparent;
+      transition: all 140ms var(--ease);
+    }
+    .tick.on { background: var(--brand); border-color: var(--brand); color: var(--brand-ink); }
+
     .stepper { padding: 0 14px 12px; }
+
+    /* each fact stays on one line, and they separate themselves visually
+       instead of relying on a bullet that can strand at a line break */
+    .nowrap { white-space: nowrap; }
+    .nowrap + .nowrap::before { content: '·'; color: var(--ink-3); margin-right: 6px; }
+
+    .person.mine { border-color: var(--brand-line); background: var(--brand-soft); }
+
+    /* collection progress */
+    .meter { height: 7px; border-radius: 999px; background: var(--surface-2); overflow: hidden; }
+    .meter-fill {
+      height: 100%; border-radius: 999px; background: var(--brand);
+      transition: width 320ms var(--ease); min-width: 0;
+    }
+
+    /* ── pay sheet ── */
     .overlay {
       position: fixed; inset: 0; z-index: 40;
-      background: rgb(10 15 25 / 45%);
+      background: rgb(8 12 16 / 55%);
+      backdrop-filter: blur(3px);
       display: flex; align-items: flex-end; justify-content: center;
+      animation: fade 160ms var(--ease);
     }
+    @keyframes fade { from { opacity: 0; } }
     .sheet {
       width: 100%; max-width: 520px; background: var(--surface);
-      border-radius: 18px 18px 0 0;
+      border-radius: var(--r-lg) var(--r-lg) 0 0;
       padding: 20px 16px calc(24px + env(safe-area-inset-bottom));
       max-height: 90vh; overflow-y: auto;
+      animation: rise 220ms var(--ease);
     }
+    @keyframes rise { from { transform: translateY(14px); } }
     @media (min-width: 560px) {
       .overlay { align-items: center; }
-      .sheet { border-radius: 18px; margin: 16px; }
+      .sheet { border-radius: var(--r-lg); margin: 16px; animation: fade 160ms var(--ease); }
     }
   `,
 })
@@ -318,6 +436,8 @@ export class BillRoomPage {
   protected readonly copiedUpi = signal(false);
   protected readonly nudged = signal<string | null>(null);
   protected readonly showPaySheet = signal(false);
+  /** The QR card folds away once people have joined; it's only needed up front. */
+  protected readonly shareOpen = signal(false);
   protected offlineName = '';
   protected myName = identity.name();
 
@@ -357,6 +477,16 @@ export class BillRoomPage {
   );
 
   protected readonly shareUrl = computed(() => `${environment.appBaseUrl}/j/${this.code}`);
+
+  /** Everyone except the payer — i.e. how many people have actually joined. */
+  protected readonly guestCount = computed(
+    () => this.participants().filter((p) => !p.is_payer).length,
+  );
+
+  protected readonly collectedPercent = computed(() => {
+    const owed = this.owedPaise();
+    return owed <= 0 ? 0 : Math.round((this.receivedPaise() / owed) * 100);
+  });
 
   protected readonly statusLabel = computed(() => {
     const status = this.state()?.bill.status;
@@ -437,8 +567,20 @@ export class BillRoomPage {
     return this.claims().find((c) => c.item_id === itemId && c.participant_id === me)?.shares ?? 0;
   }
 
-  protected eachOf(itemId: string): number {
-    return this.split().perItem.get(itemId)?.eachPaise ?? 0;
+  private static readonly NO_ITEM: ItemBreakdown = {
+    quantity: 1, claimedShares: 0, claimantCount: 0,
+    eachPaise: 0, unclaimedUnits: 0, unclaimedPaise: 0, shared: false,
+  };
+
+  protected breakdown(itemId: string): ItemBreakdown {
+    return this.split().perItem.get(itemId) ?? BillRoomPage.NO_ITEM;
+  }
+
+  protected dateLabel(iso: string): string {
+    const date = new Date(iso);
+    return Number.isNaN(date.getTime())
+      ? iso
+      : date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
   }
 
   protected initials(name: string): string {

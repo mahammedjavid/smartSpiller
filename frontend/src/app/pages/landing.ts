@@ -36,30 +36,33 @@ import { Api, ApiError, identity } from '../core/api';
         }
 
         <div class="stack">
-          <button class="card option" type="button" (click)="picker.click()">
+          <button class="card option primary" type="button" (click)="picker.click()">
             <span class="icon" aria-hidden="true">📷</span>
             <span class="stack-s grow">
               <span class="strong">Scan the bill</span>
-              <span class="small muted">Take a photo and we'll read the items for you</span>
+              <span class="small muted">Photograph it — the items fill themselves in</span>
             </span>
+            <span class="chev" aria-hidden="true">›</span>
           </button>
 
           <button class="card option" type="button" (click)="startManual()" [disabled]="creating()">
-            <span class="icon" aria-hidden="true">✏️</span>
+            <span class="icon quiet" aria-hidden="true">✏️</span>
             <span class="stack-s grow">
               <span class="strong">Enter manually</span>
               <span class="small muted">Type the items yourself — about a minute</span>
             </span>
+            <span class="chev" aria-hidden="true">›</span>
           </button>
         </div>
 
         @if (recent().length) {
           <section class="stack-s">
-            <h2>Recent</h2>
+            <div class="section-head"><h2>Recent</h2></div>
             @for (entry of recent(); track entry.code) {
-              <a class="card-flat row" [routerLink]="['/b', entry.code]">
+              <a class="card-flat row recent" [routerLink]="['/b', entry.code]">
                 <span class="grow truncate strong">{{ entry.title }}</span>
-                <code class="dim small">{{ entry.code }}</code>
+                <code class="chip chip-quiet">{{ entry.code }}</code>
+                <span class="chev" aria-hidden="true">›</span>
               </a>
             }
           </section>
@@ -81,37 +84,51 @@ import { Api, ApiError, identity } from '../core/api';
     </div>
   `,
   styles: `
-    .hero { padding: 24px 0 4px; text-align: center; align-items: center; }
+    .hero { padding: 22px 0 2px; text-align: center; align-items: center; }
     .logo {
-      width: 54px; height: 54px; border-radius: 16px;
-      background: var(--brand); color: #fff;
-      display: grid; place-items: center; font-size: 1.6rem; font-weight: 800;
+      width: 56px; height: 56px; border-radius: 17px;
+      background: var(--brand); color: var(--brand-ink);
+      display: grid; place-items: center; font-size: 1.65rem; font-weight: 800;
+      box-shadow: var(--shadow-2);
     }
-    .hero p { max-width: 34ch; margin: 0 auto; }
+    .hero h1 { font-size: 1.75rem; }
+    .hero p { max-width: 32ch; margin: 0 auto; font-size: 0.9375rem; }
 
     .option {
       display: flex; align-items: center; gap: 14px; width: 100%;
-      text-align: left; font: inherit; color: inherit; cursor: pointer; min-height: 84px;
+      text-align: left; font: inherit; color: inherit; cursor: pointer; min-height: 86px;
+      transition: border-color 140ms var(--ease), transform 90ms var(--ease);
     }
+    .option:hover:not(:disabled) { border-color: var(--brand-line); }
+    .option:active:not(:disabled) { transform: scale(0.99); }
     .option:disabled { opacity: 0.5; cursor: progress; }
-    .icon {
-      width: 46px; height: 46px; border-radius: 12px; flex: none;
-      background: var(--brand-soft); display: grid; place-items: center; font-size: 1.3rem;
-    }
-    a.card-flat { color: inherit; text-decoration: none; }
-    a.card-flat:hover { border-color: var(--brand); }
+    .option.primary { border-color: var(--brand-line); }
 
-    .scan-anim { width: 100%; height: 96px; border-radius: 12px; background: var(--surface-2); position: relative; overflow: hidden; }
+    .icon {
+      width: 48px; height: 48px; border-radius: 14px; flex: none;
+      background: var(--brand-soft); display: grid; place-items: center; font-size: 1.35rem;
+    }
+    .icon.quiet { background: var(--surface-2); }
+    .chev { color: var(--ink-3); font-size: 1.4rem; line-height: 1; flex: none; }
+
+    a.card-flat { color: inherit; text-decoration: none; }
+    .recent { transition: border-color 140ms var(--ease); }
+    .recent:hover { border-color: var(--brand-line); }
+
+    .scan-anim {
+      width: 100%; height: 104px; border-radius: var(--r);
+      background: var(--surface-2); position: relative; overflow: hidden;
+    }
     .beam {
       position: absolute; left: 0; right: 0; height: 3px;
-      background: var(--brand); box-shadow: 0 0 14px var(--brand);
+      background: var(--brand); box-shadow: 0 0 16px var(--brand);
       animation: sweep 1.4s ease-in-out infinite alternate;
     }
     @keyframes sweep { from { top: 8%; } to { top: 92%; } }
 
-    .step { display: flex; gap: 10px; align-items: center; font-size: 0.875rem; color: var(--ink-2); }
+    .step { display: flex; gap: 11px; align-items: center; font-size: 0.875rem; color: var(--ink-2); }
     .num {
-      width: 22px; height: 22px; border-radius: 999px; flex: none;
+      width: 23px; height: 23px; border-radius: 999px; flex: none;
       background: var(--brand-soft); color: var(--brand);
       display: grid; place-items: center; font-size: 0.75rem; font-weight: 750;
     }

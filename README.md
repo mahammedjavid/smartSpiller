@@ -149,7 +149,8 @@ directory and SPA rewrite. Set `apiBaseUrl` and `appBaseUrl` in `environment.pro
   trust-based, and the UI says so rather than implying otherwise.
 - **Some UPI apps** refuse intent links to personal VPAs or cap the amount. Every pay screen
   also shows a QR code and a **Copy UPI ID** fallback.
-- **One server owns the data.** SQLite is a file on that machine — fine for a group, a team, or
-  a demo; swap the four functions in `backend/src/db.ts` for Postgres if you outgrow it.
+- **One server owns the data.** Storage is local SQLite — a single file at
+  `backend/data/smart-splitter.db`, set by `DATABASE_FILE`. Fine for a group, a team, or a demo.
+  If you outgrow it, `backend/src/db.ts` is the only file that talks to the database.
 - **Trip mode** (several bills, net balances, minimum-payment settlement) is designed in
   `REQUIREMENTS.md` but not built.

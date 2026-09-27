@@ -209,3 +209,108 @@ describe('computeSplit — edge cases', () => {
     expectAddsUp(result);
   });
 });
+
+describe('computeSplit — quantity lines take units, not the whole line', () => {
+  // The Bhagini bill: Mutton biriyani ₹400 × 4 = ₹1600, and one person had one.
+  const biriyani = () => item('bir', 'Mutton biriyani', 1600, 4);
+
+  it('charges one unit, not the whole line, when one person taps a Qty 4 item', () => {
+    const result = computeSplit(bill(), [biriyani()], [person('A', 'Siva')], [claim('bir', 'A')]);
+    expect(result.people[0]!.itemSubtotalPaise).toBe(40000);       // ₹400, not ₹1600
+    expect(result.unclaimed.itemSubtotalPaise).toBe(120000);       // the other three
+    expect(result.perItem.get('bir')!.unclaimedUnits).toBe(3);
+    expectAddsUp(result);
+  });
+
+  it('scales with the stepper — two of the four biryanis', () => {
+    const result = computeSplit(bill(), [biriyani()], [person('A', 'Siva')], [claim('bir', 'A', 2)]);
+    expect(result.people[0]!.itemSubtotalPaise).toBe(80000);
+    expect(result.unclaimed.itemSubtotalPaise).toBe(80000);
+    expectAddsUp(result);
+  });
+
+  it('gives one unit each when four people each take one', () => {
+    const people = [person('A', 'A'), person('B', 'B'), person('C', 'C'), person('D', 'D')];
+    const result = computeSplit(
+      bill(), [biriyani()], people,
+      people.map((p) => claim('bir', p.id)),
+    );
+    for (const p of result.people) expect(p.itemSubtotalPaise).toBe(40000);
+    expect(result.unclaimed.itemSubtotalPaise).toBe(0);
+    expectAddsUp(result);
+  });
+
+  it('falls back to sharing when more people claim than there are units', () => {
+    // One dish, three people picked it — the classic shared plate.
+    const result = computeSplit(
+      bill(), [item('dish', 'Chilly chicken', 500)],
+      [person('A', 'A'), person('B', 'B'), person('C', 'C')],
+      [claim('dish', 'A'), claim('dish', 'B'), claim('dish', 'C')],
+    );
+    const totals = result.people.map((p) => p.itemSubtotalPaise);
+    expect(totals).toEqual([16667, 16667, 16666]);
+    expect(result.perItem.get('dish')!.shared).toBe(true);
+    expectAddsUp(result);
+  });
+
+  it('shares the line when 3 people want 5 units of a Qty 4 item', () => {
+    const result = computeSplit(
+      bill(), [biriyani()],
+      [person('A', 'A'), person('B', 'B'), person('C', 'C')],
+      [claim('bir', 'A', 3), claim('bir', 'B', 1), claim('bir', 'C', 1)],
+    );
+    expect(result.people.reduce((n, p) => n + p.itemSubtotalPaise, 0)).toBe(160000);
+    expect(result.unclaimed.itemSubtotalPaise).toBe(0);
+    expectAddsUp(result);
+  });
+
+  it('keeps a quantity line exact when the unit price does not divide evenly', () => {
+    const result = computeSplit(
+      bill({ tax_paise: 700 }), [item('x', 'Tandoori Roti', 100.01, 3)],
+      [person('A', 'A'), person('B', 'B')],
+      [claim('x', 'A'), claim('x', 'B')],
+    );
+    // ₹100.01 over 3 units → 3334 + 3334 + 3333; two taken, one left
+    expect(result.people[0]!.itemSubtotalPaise).toBe(3334);
+    expect(result.people[1]!.itemSubtotalPaise).toBe(3334);
+    expect(result.unclaimed.itemSubtotalPaise).toBe(3333);
+    expectAddsUp(result);
+  });
+});
+
+describe('computeSplit — the Bhagini bill end to end', () => {
+  // Mutton biriyani ₹1600 (×4) · Tandoori Roti ₹150 (×5) · Chilly chicken ₹500 (×2)
+  // · Chicken pepper ₹750 (×3). Sub-total ₹3000, CGST ₹75, SGST ₹75, total ₹3150.
+  const items = [
+    item('bir', 'Mutton biriyani', 1600, 4),
+    item('roti', 'Tandoori Roti', 150, 5),
+    item('chilly', 'Chilly chicken', 500, 2),
+    item('pepper', 'Chicken pepper', 750, 3),
+  ];
+  const theBill = bill({ tax_paise: 15000 }); // CGST + SGST combined
+
+  it('bills one biryani and one roti to a single diner', () => {
+    const result = computeSplit(
+      theBill, items, [person('A', 'Siva')],
+      [claim('bir', 'A'), claim('roti', 'A')],
+    );
+    // ₹400 + ₹30 of food, not ₹1600 + ₹150
+    expect(result.people[0]!.itemSubtotalPaise).toBe(43000);
+    expect(result.grandTotalPaise).toBe(315000);
+    expectAddsUp(result);
+  });
+
+  it('adds up to ₹3,150.00 once every unit is taken', () => {
+    const people = [person('A', 'A'), person('B', 'B')];
+    const claims = [
+      claim('bir', 'A', 2), claim('bir', 'B', 2),
+      claim('roti', 'A', 3), claim('roti', 'B', 2),
+      claim('chilly', 'A', 1), claim('chilly', 'B', 1),
+      claim('pepper', 'A', 2), claim('pepper', 'B', 1),
+    ];
+    const result = computeSplit(theBill, items, people, claims);
+    expect(result.unclaimed.totalPaise).toBe(0);
+    expect(result.grandTotalPaise).toBe(315000);
+    expectAddsUp(result);
+  });
+});

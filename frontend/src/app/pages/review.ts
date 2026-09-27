@@ -22,7 +22,7 @@ interface EditableItem {
     <div class="page stack-l">
       <header class="stack-s">
         <h1>Check the bill</h1>
-        <p class="small muted">Fix anything that looks wrong before you share it. Nobody can claim until you open it.</p>
+        <p class="small muted">Fix anything that looks wrong. Nobody can claim until you open it.</p>
       </header>
 
       @if (loading()) {
@@ -50,30 +50,38 @@ interface EditableItem {
         </section>
 
         <section class="stack-s">
-          <div class="row-between">
+          <div class="section-head">
             <h2>Items</h2>
-            <span class="small dim">{{ items().length }} item{{ items().length === 1 ? '' : 's' }}</span>
+            <span class="tiny dim">{{ items().length }} item{{ items().length === 1 ? '' : 's' }}</span>
           </div>
 
+          @if (items().length) {
+            <div class="item-row col-heads tiny dim" aria-hidden="true">
+              <span>Item</span><span>Qty</span><span>Line total</span><span></span>
+            </div>
+          }
+
           @for (item of items(); track $index) {
-            <div class="card-flat item-row">
+            <div class="item-row">
               <input
                 class="name" [(ngModel)]="item.name" [attr.aria-label]="'Item ' + ($index + 1) + ' name'"
-                placeholder="Item name" maxlength="80" (ngModelChange)="touch()" />
+                [name]="'name' + $index" placeholder="Item name" maxlength="80" (ngModelChange)="touch()" />
               <input
                 class="qty" type="number" inputmode="numeric" min="1" step="1"
-                [(ngModel)]="item.quantity" [attr.aria-label]="'Quantity for ' + item.name"
-                (ngModelChange)="touch()" />
-              <input
-                class="price" type="number" inputmode="decimal" min="0" step="0.01"
-                [(ngModel)]="item.price" [attr.aria-label]="'Total price for ' + item.name"
-                (ngModelChange)="touch()" />
+                [(ngModel)]="item.quantity" [name]="'qty' + $index"
+                [attr.aria-label]="'Quantity for ' + item.name" (ngModelChange)="touch()" />
+              <span class="money-input">
+                <input
+                  type="number" inputmode="decimal" min="0" step="0.01"
+                  [(ngModel)]="item.price" [name]="'price' + $index"
+                  [attr.aria-label]="'Total price for ' + item.name" (ngModelChange)="touch()" />
+              </span>
               <button
-                class="btn btn-sm btn-danger remove" type="button"
+                class="remove" type="button"
                 [attr.aria-label]="'Remove ' + item.name" (click)="removeItem($index)">✕</button>
             </div>
           } @empty {
-            <p class="banner banner-info">No items yet. Add the first one below.</p>
+            <p class="banner banner-info">No items yet — add the first one below.</p>
           }
 
           <button class="btn btn-ghost btn-block" type="button" (click)="addItem()">+ Add item</button>
@@ -84,20 +92,25 @@ interface EditableItem {
           @for (charge of chargeFields; track charge.key) {
             <div class="charge-row">
               <label [for]="charge.key">{{ charge.label }}</label>
-              <input
-                [id]="charge.key" type="number" inputmode="decimal" step="0.01"
-                [ngModel]="charges()[charge.key]"
-                (ngModelChange)="setCharge(charge.key, $event)" />
+              <span class="money-input">
+                <input
+                  [id]="charge.key" [name]="charge.key" type="number" inputmode="decimal" step="0.01"
+                  [ngModel]="charges()[charge.key]"
+                  (ngModelChange)="setCharge(charge.key, $event)" />
+              </span>
             </div>
           }
           <p class="tiny dim">Combine CGST and SGST into one tax figure. Round off can be negative.</p>
         </section>
 
         <section class="card stack-s totals">
-          <div class="row-between"><span class="muted">Items</span><span class="money">{{ subtotalPaise() | rupees }}</span></div>
-          <div class="row-between"><span class="muted">Taxes and charges</span><span class="money">{{ netChargesPaise() | rupees }}</span></div>
+          <div class="row-between"><span class="muted small">Items</span><span class="money small">{{ subtotalPaise() | rupees }}</span></div>
+          <div class="row-between"><span class="muted small">Taxes and charges</span><span class="money small">{{ netChargesPaise() | rupees }}</span></div>
           <hr class="divider" />
-          <div class="row-between"><span class="strong">Grand total</span><span class="big-money">{{ totalPaise() | rupees }}</span></div>
+          <div class="row-between">
+            <span class="strong">Grand total</span>
+            <span class="big-money">{{ totalPaise() | rupees }}</span>
+          </div>
         </section>
 
         <section class="card stack">
@@ -131,7 +144,11 @@ interface EditableItem {
       <div class="sticky-bar">
         <div class="sticky-inner">
           <div class="grow">
-            <div class="tiny dim">Total</div>
+            @if (blocker(); as reason) {
+              <div class="tiny" style="color:var(--warn)">{{ reason }}</div>
+            } @else {
+              <div class="tiny dim">Total</div>
+            }
             <div class="money">{{ totalPaise() | rupees }}</div>
           </div>
           <button class="btn btn-primary" type="button" [disabled]="!canOpen() || saving()" (click)="openForSplitting()">
@@ -143,14 +160,29 @@ interface EditableItem {
     }
   `,
   styles: `
-    .item-row { display: grid; grid-template-columns: 1fr 56px 88px 40px; gap: 8px; align-items: center; }
-    .item-row input { min-height: 40px; padding: 8px 10px; }
-    .item-row .qty, .item-row .price { text-align: right; }
-    .remove { min-height: 40px; padding: 0; }
-    .charge-row { display: grid; grid-template-columns: 1fr 120px; align-items: center; gap: 10px; }
+    .item-row {
+      display: grid;
+      grid-template-columns: 1fr 58px 96px 32px;
+      gap: 8px;
+      align-items: center;
+    }
+    .col-heads { padding: 0 2px; font-weight: 620; }
+    .col-heads span:nth-child(2), .col-heads span:nth-child(3) { text-align: right; }
+
+    .item-row input { min-height: 42px; padding: 8px 10px; }
+    .item-row .qty { text-align: right; }
+
+    .remove {
+      width: 32px; height: 42px; padding: 0;
+      background: none; border: 0; cursor: pointer;
+      color: var(--ink-3); font-size: 0.9rem; border-radius: 8px;
+      transition: color 140ms var(--ease), background 140ms var(--ease);
+    }
+    .remove:hover { color: var(--danger); background: var(--danger-soft); }
+
+    .charge-row { display: grid; grid-template-columns: 1fr 124px; align-items: center; gap: 10px; }
     .charge-row label { margin: 0; }
-    .charge-row input { text-align: right; min-height: 40px; }
-    .totals .money { font-size: 1rem; }
+    .charge-row input { min-height: 42px; }
   `,
 })
 export class ReviewPage {
@@ -211,6 +243,14 @@ export class ReviewPage {
 
   protected readonly totalPaise = computed(() => this.subtotalPaise() + this.netChargesPaise());
   protected readonly upiValid = computed(() => isValidUpiId(this.payerUpiId()));
+  /** Why "Open for splitting" is disabled — shown instead of leaving it a mystery. */
+  protected readonly blocker = computed(() => {
+    if (this.items().length === 0) return 'Add at least one item';
+    if (!this.payerName().trim()) return 'Add your name below';
+    if (!this.upiValid()) return 'Add a valid UPI ID below';
+    return null;
+  });
+
   protected readonly canOpen = computed(
     () => this.items().length > 0 && this.payerName().trim().length > 0 && this.upiValid(),
   );

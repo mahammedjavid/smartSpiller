@@ -67,14 +67,28 @@ export interface UnclaimedSplit {
   totalPaise: number;
 }
 
+export interface ItemBreakdown {
+  quantity: number;
+  /** Units people have taken between them. */
+  claimedShares: number;
+  claimantCount: number;
+  /** What one unit costs when units are being taken one by one, else one share. */
+  eachPaise: number;
+  /** Units nobody has taken yet — always 0 once the line is over-subscribed. */
+  unclaimedUnits: number;
+  unclaimedPaise: number;
+  /** True when more shares are claimed than there are units, i.e. people are sharing. */
+  shared: boolean;
+}
+
 export interface SplitResult {
   people: PersonSplit[];
   unclaimed: UnclaimedSplit;
   /** tax + service charge + tip − discount + round off */
   netChargesPaise: number;
   grandTotalPaise: number;
-  /** Per item, so the bill room can show "₹X each". */
-  perItem: Map<string, { totalShares: number; claimantCount: number; eachPaise: number }>;
+  /** Per item, so the bill room can show "₹X each" and what's left. */
+  perItem: Map<string, ItemBreakdown>;
 }
 
 export type SplitBill = Pick<
@@ -121,6 +135,10 @@ export function computeSplit(
   }
 
   for (const item of items) {
+    const quantity = Math.max(1, item.quantity);
+    // What each individual unit of this line costs, exact to the paisa.
+    const unitAmounts = largestRemainder(item.total_price_paise, new Array(quantity).fill(1));
+
     const itemClaims = (claimsByItem.get(item.id) ?? []).sort(
       (a, b) => indexOf.get(a.participant_id)! - indexOf.get(b.participant_id)!,
     );
@@ -128,13 +146,45 @@ export function computeSplit(
     if (itemClaims.length === 0) {
       unclaimedIds.push(item.id);
       unclaimedSubtotal += item.total_price_paise;
-      perItem.set(item.id, { totalShares: 0, claimantCount: 0, eachPaise: 0 });
+      perItem.set(item.id, {
+        quantity,
+        claimedShares: 0,
+        claimantCount: 0,
+        eachPaise: unitAmounts[0] ?? 0,
+        unclaimedUnits: quantity,
+        unclaimedPaise: item.total_price_paise,
+        shared: false,
+      });
       continue;
     }
 
     const shares = itemClaims.map((c) => Math.max(1, c.shares));
     const totalShares = shares.reduce((a, b) => a + b, 0);
-    const amounts = largestRemainder(item.total_price_paise, shares);
+
+    // Two different things a tap can mean, and the counts tell them apart:
+    //
+    //  · Taking units — "4 biryanis, I had one" → one unit's price, and the
+    //    other three stay unclaimed rather than landing on the one person who
+    //    tapped.
+    //  · Sharing — more shares than units, e.g. one dish three people picked →
+    //    the line is divided between them in proportion to their shares.
+    const sharing = totalShares > quantity;
+    let amounts: number[];
+    let leftoverPaise = 0;
+    let leftoverUnits = 0;
+
+    if (sharing) {
+      amounts = largestRemainder(item.total_price_paise, shares);
+    } else {
+      let unit = 0;
+      amounts = shares.map((count) => {
+        let sum = 0;
+        for (let k = 0; k < count; k++) sum += unitAmounts[unit++]!;
+        return sum;
+      });
+      for (let k = unit; k < quantity; k++) leftoverPaise += unitAmounts[k]!;
+      leftoverUnits = quantity - totalShares;
+    }
 
     itemClaims.forEach((claim, i) => {
       const personIndex = indexOf.get(claim.participant_id)!;
@@ -148,11 +198,21 @@ export function computeSplit(
       });
     });
 
+    if (leftoverPaise > 0) {
+      unclaimedSubtotal += leftoverPaise;
+      unclaimedIds.push(item.id);
+    }
+
     perItem.set(item.id, {
-      totalShares,
+      quantity,
+      claimedShares: totalShares,
       claimantCount: itemClaims.length,
-      // what one share costs — "₹X each" on the item row
-      eachPaise: largestRemainder(item.total_price_paise, new Array(totalShares).fill(1))[0] ?? 0,
+      eachPaise: sharing
+        ? largestRemainder(item.total_price_paise, new Array(totalShares).fill(1))[0] ?? 0
+        : unitAmounts[0] ?? 0,
+      unclaimedUnits: leftoverUnits,
+      unclaimedPaise: leftoverPaise,
+      shared: sharing,
     });
   }
 

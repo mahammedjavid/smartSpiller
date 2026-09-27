@@ -208,11 +208,18 @@ billsRouter.post('/bills/:code/join', (req, res) => {
     req.body,
   );
 
-  const existing = participantId
+  // The id this device already holds, if any.
+  let existing = participantId
     ? (db
         .prepare('select id from participants where id = ? and bill_code = ?')
         .get(participantId, bill.code) as unknown as { id: string } | undefined)
     : undefined;
+
+  // Otherwise match on the name. Without this, joining again from a second
+  // device or a cleared browser creates "Vaishali" alongside "vaishali".
+  existing ??= db
+    .prepare('select id from participants where bill_code = ? and lower(trim(display_name)) = ?')
+    .get(bill.code, name.toLowerCase()) as unknown as { id: string } | undefined;
 
   let id: string;
   if (existing) {
@@ -236,11 +243,17 @@ billsRouter.post('/bills/:code/participants', (req, res) => {
   const bill = requireOwner(req, req.params.code!);
   const { name } = parse(z.object({ name: z.string().trim().min(1).max(40) }), req.body);
 
-  db.prepare('insert into participants (id, bill_code, display_name) values (?,?,?)').run(
-    newId(),
-    bill.code,
-    name,
-  );
+  const already = db
+    .prepare('select id from participants where bill_code = ? and lower(trim(display_name)) = ?')
+    .get(bill.code, name.toLowerCase());
+
+  if (!already) {
+    db.prepare('insert into participants (id, bill_code, display_name) values (?,?,?)').run(
+      newId(),
+      bill.code,
+      name,
+    );
+  }
   broadcast(bill.code);
   res.json(billState(bill.code));
 });

@@ -9,9 +9,13 @@ import { Api, identity } from '../core/api';
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="page">
-      <div class="card stack">
+      <div class="join-hero stack-s center">
+        <div class="logo" aria-hidden="true">₹</div>
         <h1>Join the split</h1>
-        <p class="muted small">Enter your name so your friends know which items are yours. No sign-up needed.</p>
+        <p class="muted small">Your name is all we need — no sign-up.</p>
+      </div>
+
+      <div class="card stack">
 
         <form class="stack" (ngSubmit)="join()">
           <div>
@@ -34,6 +38,15 @@ import { Api, identity } from '../core/api';
         </form>
       </div>
     </div>
+  `,
+  styles: `
+    .join-hero { padding: 28px 0 20px; align-items: center; }
+    .logo {
+      width: 52px; height: 52px; border-radius: 16px;
+      background: var(--brand); color: var(--brand-ink);
+      display: grid; place-items: center; font-size: 1.55rem; font-weight: 800;
+      box-shadow: var(--shadow-2);
+    }
   `,
 })
 export class JoinPage {
