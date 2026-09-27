@@ -1,0 +1,10 @@
+{
+  "name": "smart-splitter",
+  "private": true,
+  "description": "Tooling root — the apps live in frontend/ and backend/.",
+  "scripts": {
+    "dev:api": "npm --prefix backend run dev",
+    "dev:web": "npm --prefix frontend start",
+    "test": "npm --prefix frontend test"
+  }
+}
